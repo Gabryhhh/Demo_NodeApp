@@ -1,7 +1,3 @@
-Capisco, vuoi integrare ulteriori passaggi relativi all'uso di un Application Load Balancer (ALB) con ECS utilizzando Terraform, ispirandoti ai passaggi forniti nel workshop originale che utilizza EKS. Ecco come puoi integrare questa sezione nel README:
-
----
-
 # 🚀 Distribuzione di Applicazioni su AWS ECS con Terraform
 
 <p align="center">
@@ -359,7 +355,3 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 Siete invitati a contribuire migliorando questo workshop con nuove funzionalità, correzioni di bug o suggerimenti. Create una pull request e sarò felice di esaminarla!
 
 -R3cube Team
-
----
-
-Questo README ora include i passaggi per l'aggiunta di un Application Load Balancer utilizzando Helm, adattati per l'uso con ECS anziché EKS. Se hai ulteriori aggiustamenti da fare o altre domande, fammi sapere!
