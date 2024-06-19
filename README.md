@@ -107,6 +107,7 @@ terraform destroy
 - [Documentazione Terraform](https://learn.hashicorp.com/terraform)
 
 ## 🤝 Contributi
-# -R3cube Team
+
+# - ${\color{orange}R3 \space \color{blue}Cube}$
 
 ---
