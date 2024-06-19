@@ -107,9 +107,6 @@ terraform destroy
 - [Documentazione Terraform](https://learn.hashicorp.com/terraform)
 
 ## 🤝 Contributi
-
-Siete invitati a contribuire migliorando questo workshop con nuove funzionalità, correzioni di bug o suggerimenti. Create una pull request e sarò felice di esaminarla!
-
--R3cube Team
+# -R3cube Team
 
 ---
