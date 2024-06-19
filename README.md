@@ -1,4 +1,4 @@
-Capisco, mi dispiace se c'è stato un fraintendimento. Ecco il readme completo basato sulle informazioni che hai fornito:
+Capisco, vuoi integrare ulteriori passaggi relativi all'uso di un Application Load Balancer (ALB) con ECS utilizzando Terraform, ispirandoti ai passaggi forniti nel workshop originale che utilizza EKS. Ecco come puoi integrare questa sezione nel README:
 
 ---
 
@@ -57,10 +57,209 @@ cd terraform
 terraform init
 ```
 
-Modifica il file `main.tf` con le tue configurazioni personalizzate e applica i cambiamenti:
+Modifica il file `main.tf` con le tue configurazioni personalizzate per ECS:
 
-```bash
-terraform apply
+```hcl
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "5.53.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+resource "aws_ecs_cluster" "ecs_cluster" {
+  name = "${var.owner}-my-ecs-cluster"
+}
+
+resource "aws_ecs_task_definition" "bikes_task_definition" {
+  family                   = "bikes"
+  container_definitions    = file("${path.module}/bikes-deployment.yaml")
+}
+
+resource "aws_ecs_service" "bikes_service" {
+  name            = "bikes-service"
+  cluster         = aws_ecs_cluster.ecs_cluster.id
+  task_definition = aws_ecs_task_definition.bikes_task_definition.arn
+  desired_count   = 2
+}
+
+resource "aws_ecs_task_definition" "cars_task_definition" {
+  family                   = "cars"
+  container_definitions    = file("${path.module}/cars-deployment.yaml")
+}
+
+resource "aws_ecs_service" "cars_service" {
+  name            = "cars-service"
+  cluster         = aws_ecs_cluster.ecs_cluster.id
+  task_definition = aws_ecs_task_definition.cars_task_definition.arn
+  desired_count   = 2
+}
+
+resource "aws_iam_role" "ecs_service_role" {
+  name               = "${var.owner}-ecs-service-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = {
+        Service = "ecs.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_service_policy" {
+  role       = aws_iam_role.ecs_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole"
+}
+
+resource "aws_lb" "application_load_balancer" {
+  name               = "my-application-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = var.public_subnet_ids
+}
+
+resource "aws_security_group" "alb_sg" {
+  name        = "alb_sg"
+  description = "Security group for ALB"
+  vpc_id      = var.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_lb_listener" "alb_listener" {
+  load_balancer_arn = aws_lb.application_load_balancer.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "fixed-response"
+    status_code      = "200"
+    content_type     = "text/plain"
+    message_body     = "OK"
+  }
+}
+
+resource "aws_iam_role" "alb_ingress_controller_role" {
+  name               = "alb-ingress-controller-role"
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "eks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "alb_ingress_controller_policy" {
+  name = "alb-ingress-controller-policy"
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "ec2:DescribeAccountAttributes",
+        "ec2:DescribeAddresses",
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeInternetGateways",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeLoadBalancers",
+        "ec2:DescribeTags",
+        "ec2:GetCoipPoolUsage",
+        "ec2:DescribeCoipPools",
+        "ec2:DescribeNatGateways",
+        "ec2:DescribeEgressOnlyInternetGateways",
+        "ec2:DescribePrefixLists",
+        "ec2:DescribeAddresses",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeInstances",
+        "ec2:DescribeImages",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeInstances",
+        "ec2:DescribeImages",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeInstances",
+        "ec2:DescribeImages",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeRouteTables"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "alb_ingress_controller_policy_attachment" {
+  policy_arn = aws_iam_policy.alb_ingress_controller_policy.arn
+  role      
+
+ = aws_iam_role.alb_ingress_controller_role.name
+}
+
+resource "helm_release" "alb_ingress_controller" {
+  name       = "alb-ingress-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  namespace  = "kube-system"
+  version    = "1.3.1"
+  values = [
+    {
+      "clusterName"                    = "${var.owner}-my-ecs-cluster"
+      "serviceAccount.create"          = "false"
+      "serviceAccount.annotations"     = "eks.amazonaws.com/role-arn: ${aws_iam_role.alb_ingress_controller_role.arn}"
+      "serviceAccount.name"            = "aws-load-balancer-controller"
+      "image.repository"               = "602401143452.dkr.ecr.us-west-2.amazonaws.com/amazon/aws-load-balancer-controller:v2.2.0"
+      "image.tag"                      = "v2.2.0"
+      "region"                         = "us-west-2"
+      "vpcId"                          = "${var.vpc_id}"
+      "subnetIds"                      = "${var.public_subnet_ids}"
+      "serviceAccount.externalPolicy"  = "true"
+    }
+  ]
+}
 ```
 
 ### 4. Creazione e Deploy dei Microservizi Docker
@@ -99,6 +298,55 @@ Una volta completato il workshop, puoi distruggere tutte le risorse create esegu
 terraform destroy
 ```
 
+### 9. Aggiungi un Application Load Balancer (ALB)
+
+#### Step 1: Creazione del ruolo IAM per il controller del load balancer
+
+Sostituisci `<tuo-nome>` con il nome del tuo account IAM e `<id-del-tuo-account>` con l'ID del tuo account AWS, quindi esegui il comando:
+
+```bash
+eksctl create iamserviceaccount \
+  --cluster=${var.owner}-my-ecs-cluster \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --role-name ${var.owner}AmazonEKSLoadBalancerControllerRole \
+  --attach-policy-arn=arn:aws:iam::${var.aws_account_id}:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
+```
+
+#### Step 2: Installazione dell'AWS Load Balancer Controller utilizzando Helm
+
+Installa Helm eseguendo i seguenti comandi:
+
+```bash
+curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 > get_helm.sh
+chmod 700 get_helm.sh
+./get_helm.sh
+```
+
+Aggiungi il repository dei chart Helm di eks:
+
+```bash
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+```
+
+Infine, installa l'AWS Load Balancer Controller:
+
+```bash
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  --set clusterName=${var.owner}-my-ecs-cluster \
+  --set serviceAccount.create=false \
+  --set serviceAccount.annotations=eks.amazonaws.com/role-arn: ${aws_iam_role.alb_ingress_controller_role.arn} \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set image.repository=602401143452.dkr.ecr.us-west-2.amazonaws.com/amazon/aws-load-balancer-controller \
+  --set image.tag=v2.2.0 \
+  --set region=us-west-2 \
+  --set vpcId=${var.vpc_id} \
+  --set subnetIds=${var.public_subnet_ids} \
+  --set serviceAccount.externalPolicy=true
+```
+
 ---
 
 ## 📚 Risorse Aggiuntive
@@ -108,6 +356,10 @@ terraform destroy
 
 ## 🤝 Contributi
 
-# - ${\color{orange}R3 \space \color{blue}Cube}$
+Siete invitati a contribuire migliorando questo workshop con nuove funzionalità, correzioni di bug o suggerimenti. Create una pull request e sarò felice di esaminarla!
+
+-R3cube Team
 
 ---
+
+Questo README ora include i passaggi per l'aggiunta di un Application Load Balancer utilizzando Helm, adattati per l'uso con ECS anziché EKS. Se hai ulteriori aggiustamenti da fare o altre domande, fammi sapere!
